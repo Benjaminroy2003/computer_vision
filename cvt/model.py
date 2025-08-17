@@ -106,9 +106,10 @@ class MLP(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         x = self.dropout(x)
-        return x        
-            
+        return x 
+           
 class chat_gpt_multihead_attention(nn.Module):
+            
     def __init__(self, in_dim, out_dim, num_heads, kernel_size=3, qkv_bias=False,
                  stride_kv=1, stride_q=1, padding_kv=1, padding_q=1, with_cls_token=True):
         super().__init__()
@@ -169,8 +170,50 @@ class chat_gpt_multihead_attention(nn.Module):
         out = self.proj_out(out)
         return out
 
+class Block(nn.Module):
+    def __init__(self, in_dim ,out_dim, num_heads, kernel_size=3, qkv_bias=False,
+                 stride_kv=1, stride_q=1, padding_kv=1, padding_q=1, with_cls_token=False):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.num_heads = num_heads
+        hidden_dim = out_dim * 4
+        self.atten = MultiheadAttention( in_dim , out_dim ,num_heads, kernel_size, qkv_bias,stride_kv, stride_q, padding_kv, padding_q, with_cls_token)
+        self.norm = nn.LayerNorm(in_dim)
+        self.mlp = MLP(in_dim, hidden_dim, out_dim, dropout=0.)
+    def forward(self,x,h,w):
+        res = x
+        x = self.norm(x)
+        attn = self.atten(x,h,w)
+        x = res + attn
+        x = x + self.mlp(self.norm(x))
+        return x
+    
 class VisisonTransformer(nn.Module):
-    pass       
+
+    def __init__(self,
+                 patch_size=16,
+                 patch_stride = 16,
+                 embed_dim=768,
+                 in_chans=3,
+                 depth=12,
+                 num_heads=12,
+                 qkv_bias = False,
+                 init = 'trunc_norm',
+                 ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.patch_embed = ConvEmbedding(in_channels=in_chans,embed_dim=embed_dim,patch_size=patch_size,stride=patch_stride)
+        block = []
+        for i in range(depth):
+            self.blocks = nn.ModuleList([Block(in_dim=embed_dim, out_dim=embed_dim, num_heads=num_heads, kernel_size=3, qkv_bias=qkv_bias)
+                                         for _ in range(depth)])
+    def forward(self,x):
+        x = self.patch_embed(x)
+        x = x.flatten(2).transpose(1, 2)  # (B, N, C)
+        
+
+        
 
 def test_CVCTEmbedding():
     x = torch.randn(2, 3, 224, 224)  # Example input tensor
