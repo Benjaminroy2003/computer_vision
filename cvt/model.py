@@ -208,13 +208,30 @@ class VisisonTransformer(nn.Module):
         for i in range(depth):
             self.blocks = nn.ModuleList([Block(in_dim=embed_dim, out_dim=embed_dim, num_heads=num_heads, kernel_size=3, qkv_bias=qkv_bias)
                                          for _ in range(depth)])
+        self.apply(self._init_weights)
     def forward(self,x):
         x = self.patch_embed(x)
+        B,C,H,W = x.size()
         x = x.flatten(2).transpose(1, 2)  # (B, N, C)
-        
+        for i ,blk in enumerate(self.blocks):
+            x = blk(x,H,W)
+        x = x.reshape(B, C, H, W)
+        return x 
+    def _init_weights(self, m):
+        if isinstance(m,nn.Linear):
+            nn.init.trunc_normal_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
+            nn.init.constant_(m.weight, 1.0)
+            nn.init.constant_(m.bias, 0.0)
 
-        
 
+class ConvolutionalVisionTransformer(nn.Module):
+    def __init__(self,in_channel =3,num_classes=1000,init='trunc_norm',spec=None):
+        super().__init__()
+        self.num_classes = num_classes
+        
 def test_CVCTEmbedding():
     x = torch.randn(2, 3, 224, 224)  # Example input tensor
     model = ConvEmbedding(in_channels=3, embed_dim=64, patch_size=16, stride=16)
